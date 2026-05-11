@@ -19,6 +19,7 @@ import yaml
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -230,6 +231,15 @@ app = FastAPI(
     description="Agentic video generation via HTTP. Wraps ViMax pipelines.",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+# CORS — allow any origin
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
