@@ -1,0 +1,38 @@
+[project]
+name = "vimax-api"
+version = "1.0.0"
+description = "HTTP API wrapper for ViMax agentic video generation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chardet>=5.2.0",
+    "faiss-cpu>=1.12.0",
+    "google-genai>=1.47.0",
+    "langchain>=0.3.26",
+    "langchain-community>=0.3.27",
+    "langchain-openai>=0.3.27",
+    "moviepy>=2.2.1",
+    "openai>=1.95.0",
+    "opencv-python",
+    "scenedetect[opencv]>=0.6.7.1",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    "pydantic>=2.10.0",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchaudio = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[project.scripts]
+vimax-api = "api_server:main"
