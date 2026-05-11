@@ -1,14 +1,32 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.production
+.env.*.local
 
-# Virtual environments
-.venv
+# Credentials and secrets
+*.pem
+*.key
+credentials.json
+secrets.json
 
-# working directory
-.working_dir/
-.test/
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Uploads (if any)
+uploads/

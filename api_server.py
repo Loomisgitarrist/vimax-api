@@ -5,13 +5,17 @@ Supports both idea-to-video and script-to-video workflows.
 """
 
 import os
+import re
 import uuid
 import asyncio
 import json
+import tempfile
 from datetime import datetime
 from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import yaml
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
@@ -31,6 +35,54 @@ JOBS_FILE = Path(os.environ.get("VIMAX_JOBS_FILE", "./jobs.json"))
 CONFIG_PATH = os.environ.get("VIMAX_CONFIG", "configs/idea2video.yaml")
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _resolve_env_placeholders(value):
+    """Replace ${VAR} or env references with actual env var values."""
+    if isinstance(value, str):
+        # Match ${VAR_NAME}
+        def replacer(m):
+            var_name = m.group(1)
+            env_val = os.environ.get(var_name)
+            return env_val if env_val is not None else m.group(0)
+        return re.sub(r"\$\{([^}]+)\}", replacer, value)
+    if isinstance(value, dict):
+        return {k: _resolve_env_placeholders(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_env_placeholders(v) for v in value]
+    return value
+
+
+def _inject_api_keys(config_path: str) -> str:
+    """Load YAML, inject API keys from env vars, write temp config, return path."""
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    # Inject env vars into any ${VAR} placeholders
+    config = _resolve_env_placeholders(config)
+
+    # Direct env var injection for known fields
+    # Chat model
+    chat_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("FAL_API_KEY")
+    if chat_key and "chat_model" in config and "init_args" in config["chat_model"]:
+        config["chat_model"]["init_args"]["api_key"] = chat_key
+
+    # Image generator
+    image_key = os.environ.get("FAL_API_KEY") or os.environ.get("GOOGLE_IMAGEN_API_KEY") or os.environ.get("IMAGE_API_KEY")
+    if image_key and "image_generator" in config and "init_args" in config["image_generator"]:
+        config["image_generator"]["init_args"]["api_key"] = image_key
+
+    # Video generator
+    video_key = os.environ.get("FAL_VIDEO_API_KEY") or os.environ.get("FAL_API_KEY") or os.environ.get("GOOGLE_VEO_API_KEY") or os.environ.get("VIDEO_API_KEY")
+    if video_key and "video_generator" in config and "init_args" in config["video_generator"]:
+        config["video_generator"]["init_args"]["api_key"] = video_key
+
+    # Write temp config
+    temp_fd, temp_path = tempfile.mkstemp(suffix=".yaml", prefix="vimax_config_", dir=str(OUTPUT_DIR))
+    with os.fdopen(temp_fd, "w") as f:
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+    return temp_path
 
 # ---------------------------------------------------------------------------
 # Job State
@@ -114,8 +166,10 @@ async def _run_idea2video(job_id: str, req: IdeaRequest):
         job_dir = OUTPUT_DIR / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
 
-        # Override working dir via env for this run
-        pipeline = Idea2VideoPipeline.init_from_config(config_path=req.config_path)
+        # Inject API keys from env vars into a temp config
+        config_with_keys = _inject_api_keys(req.config_path)
+
+        pipeline = Idea2VideoPipeline.init_from_config(config_path=config_with_keys)
         pipeline.working_dir = str(job_dir)
 
         final_path = await pipeline(
@@ -140,7 +194,9 @@ async def _run_script2video(job_id: str, req: ScriptRequest):
         job_dir = OUTPUT_DIR / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
 
-        pipeline = Script2VideoPipeline.init_from_config(config_path=req.config_path)
+        config_with_keys = _inject_api_keys(req.config_path)
+
+        pipeline = Script2VideoPipeline.init_from_config(config_path=config_with_keys)
         pipeline.working_dir = str(job_dir)
 
         final_path = await pipeline(
